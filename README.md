@@ -86,11 +86,11 @@ Eg: (base) PS C:\Users\user1\OneDrive\Desktop\cyber-threat-detection-machine-lea
 
 Prerequesite : Install Required Software:
 
-    Install Python (3.11 or later).
+  Install Python (3.11 or later).
 
-    Install pipenv
+  Install pipenv using below command:
 
-       pip install pipenv
+  pip install pipenv
        
 1. Navigate to backend project folder
 
@@ -98,13 +98,13 @@ Prerequesite : Install Required Software:
 
 2. Steps to Create Pipfile and Pipfile.lock
 
-   pip install -r requirements.txt
+  pip install -r requirements.txt
 
 3. Verify the Pipenv Environment:
 
   Activate the virtual environment:
 
-   pipenv shell
+  pipenv shell
 
 4. Confirm installation of dependencies:
 
@@ -112,7 +112,7 @@ Prerequesite : Install Required Software:
 
 5. Deactivate the environment when done
 
-   exit
+  exit
 
 6. Export Dependencies to Pipfile.lock:
 
@@ -152,27 +152,8 @@ Verify that it exists in the backend directory.
 
 SUB PROJECTS' STRUCTURE:
 
-frontend/
-├── public/
-├── src/
-│   ├── components/
-│   │   └── InputForm.jsx
-│   ├── App.js
-│   ├── index.js
-├── package.json
-├── vite.config.js
-└── node_modules/
+  ![image](https://github.com/user-attachments/assets/1cbdd7b2-d7d4-447e-8c82-afdf98e65ebe)
 
-backend/
-|__ data
-    |___ cyberfeddefender_dataset.csv
-├── model.pkl
-├── notebook.ipynb
-├── model.py
-├── predict.py
-├── Pipfile
-├── Pipfile.lock
-├── Dockerfile
 
 Future Enhancements:
 
