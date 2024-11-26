@@ -232,7 +232,6 @@ const InputForm = () => {
           ) : (
             <>
               <p><strong>Prediction:</strong> {response.prediction}</p>
-              <p><strong>Probability:</strong> {response.probability.toFixed(2)}</p>
             </>
           )}
         </div>
