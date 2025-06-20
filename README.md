@@ -195,6 +195,115 @@ Future Enhancements:
 2. Model hyperparameter tuning to achieve greater accuracy
 
 Wish you all the best :)
+Method 2: 
+# Cyber Threat Detection using Machine Learning
+
+This project is a full-stack web application that uses a machine learning model to predict cyber threats based on network traffic data. It provides a user-friendly interface for both single and batch predictions.
+
+## Features
+
+-   **Single Prediction:** Manually enter 20 different network flow features to get an instant prediction of the activity type (e.g., Normal, DDoS, PortScan).
+-   **Batch Prediction:** Upload a CSV file containing multiple rows of network data to process them all at once.
+-   **Prediction Probabilities:** View the model's confidence score for each possible attack type.
+-   **Prediction Explanations:** Click on a result from a batch prediction to see a simplified explanation of the factors that contributed to the model's decision.
+-   **Responsive UI:** The interface is designed to work on various screen sizes.
+
+## Tech Stack
+
+-   **Frontend:** React, Vite, CSS
+-   **Backend:** Python, Flask, Flask-CORS
+-   **Machine Learning:** Scikit-learn, Pandas, Numpy
+
+## Project Structure
+
+```
+/
+├── backend/
+│   ├── data/
+│   │   └── cyberfeddefender_dataset.csv  # The training dataset
+│   ├── notebook.py                       # Script to train the model and generate .pkl files
+│   ├── predict.py                        # The Flask backend server
+│   ├── requirements.txt                  # Python dependencies
+│   └── *.pkl                             # Generated model files (after training)
+│
+└── frontend/
+    ├── src/                              # React source code
+    ├── package.json                      # Node.js dependencies
+    └── ...
+```
+
+## Setup and Installation
+
+Follow these steps to set up and run the project on your local machine.
+
+### Prerequisites
+
+-   [Node.js](https://nodejs.org/) (v18 or later recommended)
+-   [Python](https://www.python.org/) (v3.9 or later recommended) and `pip`
+
+### 1. Backend Setup
+
+First, set up the Python environment, train the model, and generate the necessary files.
+
+```bash
+# 1. Navigate to the project directory
+cd /path/to/cyber-threat-detection-machine-learning-project
+
+# 2. Create and activate a Python virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+
+# 3. Install the required Python libraries
+pip install -r backend/requirements.txt
+
+# 4. Run the training script to generate the model files
+# This reads the dataset and creates model.pkl, scaler.pkl, and label_encoder.pkl
+python backend/notebook.py
+```
+
+### 2. Frontend Setup
+
+Next, set up the React frontend.
+
+```bash
+# 1. Navigate to the frontend directory
+cd frontend
+
+# 2. Install the required Node.js packages
+npm install
+```
+
+## Running the Application
+
+The application requires two separate terminal sessions to run concurrently: one for the backend and one for the frontend.
+
+### Terminal 1: Start the Backend Server
+
+```bash
+# 1. Make sure you are in the main project directory
+#    (e.g., /path/to/cyber-threat-detection-machine-learning-project)
+# 2. Activate your virtual environment if it's not already active
+source venv/bin/activate
+
+# 3. Start the Flask server
+python backend/predict.py
+
+# The server will start on http://127.0.0.1:5000
+```
+
+### Terminal 2: Start the Frontend Server
+
+```bash
+# 1. Navigate to the frontend directory
+cd frontend
+
+# 2. Start the React development server
+npm run dev
+
+# The application will be available at http://localhost:5173 (or another port if 5173 is busy)
+```
+
+Once both servers are running, open your web browser and navigate to the frontend URL provided in the terminal (e.g., `http://localhost:5173`) to use the
 
 
 
