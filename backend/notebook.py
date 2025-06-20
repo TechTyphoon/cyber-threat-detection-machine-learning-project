@@ -1,7 +1,7 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier  # UPDATED: Import RandomForest
 import joblib
 import os
 
@@ -25,20 +25,24 @@ except FileNotFoundError:
 
 # --- 2. Preprocessing ---
 print("Starting data preprocessing...")
+df.columns = df.columns.str.strip()
+print("Column names cleaned.")
+
 feature_names = [
-    'Flow Duration', 'Total Fwd Packets', 'Total Backward Packets',
-    'Total Length of Fwd Packets', 'Total Length of Bwd Packets', 'Fwd Packet Length Max',
-    'Fwd Packet Length Min', 'Fwd Packet Length Mean', 'Fwd Packet Length Std',
-    'Bwd Packet Length Max', 'Bwd Packet Length Min', 'Bwd Packet Length Mean',
-    'Bwd Packet Length Std', 'Flow Bytes/s', 'Flow Packets/s', 'Flow IAT Mean',
-    'Flow IAT Std', 'Flow IAT Max', 'Flow IAT Min', 'Fwd IAT Total'
+    'Packet_Length', 'Duration', 'Bytes_Sent', 'Bytes_Received', 
+    'Flow_Packets/s', 'Flow_Bytes/s', 'Avg_Packet_Size', 'Total_Fwd_Packets', 
+    'Total_Bwd_Packets', 'Fwd_Header_Length', 'Bwd_Header_Length', 
+    'Sub_Flow_Fwd_Bytes', 'Sub_Flow_Bwd_Bytes'
 ]
-target_name = 'Attack Type'
+target_name = 'Attack_Type'
 
 if not all(col in df.columns for col in feature_names + [target_name]):
-    print("FATAL ERROR: The dataset is missing one or more required columns.")
+    print("FATAL ERROR: The dataset is still missing required columns.")
+    missing_cols = [col for col in feature_names + [target_name] if col not in df.columns]
+    print(f"Missing columns: {missing_cols}")
     exit()
 
+df.dropna(subset=feature_names + [target_name], inplace=True)
 X = df[feature_names]
 y = df[target_name]
 le = LabelEncoder()
@@ -49,8 +53,9 @@ X_train_scaled = scaler.fit_transform(X_train)
 print("Preprocessing complete.")
 
 # --- 3. Model Training ---
-print("Training the SVM model...")
-model = SVC(kernel='rbf', probability=True, random_state=42)
+# UPDATED: Use the more powerful RandomForestClassifier
+print("Training the RandomForest model...")
+model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
 model.fit(X_train_scaled, y_train)
 print("Model training complete.")
 

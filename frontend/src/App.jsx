@@ -1,312 +1,220 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import axios from 'axios';
 import './App.css';
-import ResultsTable from './ResultsTable';
 
-// Sample data for the "Test with Bot" feature
-const botTestData = {
-  'Flow Duration': 60, 'Total Fwd Packets': 15, 'Total Backward Packets': 12,
-  'Total Length of Fwd Packets': 1200, 'Total Length of Bwd Packets': 5800,
-  'Fwd Packet Length Max': 80, 'Fwd Packet Length Min': 80,
-  'Fwd Packet Length Mean': 80, 'Fwd Packet Length Std': 0,
-  'Bwd Packet Length Max': 500, 'Bwd Packet Length Min': 450,
-  'Bwd Packet Length Mean': 483.33, 'Bwd Packet Length Std': 28.86,
-  'Flow Bytes/s': 98333.33, 'Flow Packets/s': 450,
-  'Flow IAT Mean': 4137.93, 'Flow IAT Std': 0,
-  'Flow IAT Max': 60000, 'Flow IAT Min': 0, 'Fwd IAT Total': 60000
-};
+const featureNames = [
+  'Packet_Length', 'Duration', 'Bytes_Sent', 'Bytes_Received', 
+  'Flow_Packets/s', 'Flow_Bytes/s', 'Avg_Packet_Size', 'Total_Fwd_Packets', 
+  'Total_Bwd_Packets', 'Fwd_Header_Length', 'Bwd_Header_Length', 
+  'Sub_Flow_Fwd_Bytes', 'Sub_Flow_Bwd_Bytes'
+];
+
+// NEW: Predefined data sets for the "Test with Bot" button.
+// Each object represents a different potential scenario.
+const demoData = [
+  { // Profile 1: Potential DDoS Attack (High packets/sec, short duration)
+    'Packet_Length': 50, 'Duration': 1500, 'Bytes_Sent': 3000, 'Bytes_Received': 0, 
+    'Flow_Packets/s': 20000, 'Flow_Bytes/s': 1000000, 'Avg_Packet_Size': 50, 'Total_Fwd_Packets': 30, 
+    'Total_Bwd_Packets': 0, 'Fwd_Header_Length': 600, 'Bwd_Header_Length': 0, 
+    'Sub_Flow_Fwd_Bytes': 3000, 'Sub_Flow_Bwd_Bytes': 0
+  },
+  { // Profile 2: Potential Port Scan (Very short duration, minimal data)
+    'Packet_Length': 40, 'Duration': 50, 'Bytes_Sent': 40, 'Bytes_Received': 40, 
+    'Flow_Packets/s': 20, 'Flow_Bytes/s': 800, 'Avg_Packet_Size': 40, 'Total_Fwd_Packets': 1, 
+    'Total_Bwd_Packets': 1, 'Fwd_Header_Length': 20, 'Bwd_Header_Length': 20, 
+    'Sub_Flow_Fwd_Bytes': 40, 'Sub_Flow_Bwd_Bytes': 40
+  },
+  { // Profile 3: Normal-looking Traffic (Long duration, balanced data)
+    'Packet_Length': 1200, 'Duration': 60000, 'Bytes_Sent': 80000, 'Bytes_Received': 120000, 
+    'Flow_Packets/s': 3, 'Flow_Bytes/s': 3333, 'Avg_Packet_Size': 1100, 'Total_Fwd_Packets': 100, 
+    'Total_Bwd_Packets': 100, 'Fwd_Header_Length': 2000, 'Bwd_Header_Length': 2000, 
+    'Sub_Flow_Fwd_Bytes': 80000, 'Sub_Flow_Bwd_Bytes': 120000
+  },
+  { // Profile 4: Idle/Low Traffic
+    'Packet_Length': 0, 'Duration': 11264210, 'Bytes_Sent': 0, 'Bytes_Received': 0, 
+    'Flow_Packets/s': 0.17, 'Flow_Bytes/s': 0, 'Avg_Packet_Size': 0, 'Total_Fwd_Packets': 2, 
+    'Total_Bwd_Packets': 0, 'Fwd_Header_Length': 64, 'Bwd_Header_Length': 0, 
+    'Sub_Flow_Fwd_Bytes': 0, 'Sub_Flow_Bwd_Bytes': 0
+  }
+];
 
 function App() {
-  const feature_names = [
-    'Flow Duration', 'Total Fwd Packets', 'Total Backward Packets',
-    'Total Length of Fwd Packets', 'Total Length of Bwd Packets', 'Fwd Packet Length Max',
-    'Fwd Packet Length Min', 'Fwd Packet Length Mean', 'Fwd Packet Length Std',
-    'Bwd Packet Length Max', 'Bwd Packet Length Min', 'Bwd Packet Length Mean',
-    'Bwd Packet Length Std', 'Flow Bytes/s', 'Flow Packets/s', 'Flow IAT Mean',
-    'Flow IAT Std', 'Flow IAT Max', 'Flow IAT Min', 'Fwd IAT Total'
-  ];
-
-  const initialState = feature_names.reduce((acc, name) => ({ ...acc, [name]: '' }), {});
-
-  // State for single prediction
-  const [formData, setFormData] = useState(initialState);
-  const [result, setResult] = useState(null);
+  const [features, setFeatures] = useState(featureNames.reduce((acc, name) => ({ ...acc, [name]: '' }), {}));
+  const [prediction, setPrediction] = useState(null);
+  const [probabilities, setProbabilities] = useState(null);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  // State for batch prediction
   const [file, setFile] = useState(null);
-  const [batchResult, setBatchResult] = useState(null);
-  const [isBatchLoading, setIsBatchLoading] = useState(false);
+  const [batchResults, setBatchResults] = useState(null);
   const [batchError, setBatchError] = useState('');
-  const [selectedRow, setSelectedRow] = useState(null);
   const [explanation, setExplanation] = useState(null);
-  const [isExplainLoading, setIsExplainLoading] = useState(false);
-  const [explanationError, setExplanationError] = useState('');
 
-  const handleChange = (e) => {
+  const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prevState => ({
-      ...prevState,
-      [name]: value
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const features = feature_names.map(name => parseFloat(formData[name]));
-
-    if (features.some(isNaN)) {
-      setError('All fields must be filled with valid numbers.');
-      return;
-    }
-
-    setIsLoading(true);
-    setResult(null);
-    setError('');
-
-    try {
-      const response = await fetch('http://127.0.0.1:5000/predict', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ features }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setResult(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setIsLoading(false);
-    }
+    setFeatures(prev => ({ ...prev, [name]: value }));
   };
 
   const handleReset = () => {
-    setFormData(initialState);
-    setResult(null);
+    setFeatures(featureNames.reduce((acc, name) => ({ ...acc, [name]: '' }), {}));
+    setPrediction(null);
+    setProbabilities(null);
     setError('');
+    setExplanation(null);
   };
 
-  const handleTestByBot = () => {
-    setFormData(botTestData);
-    setResult(null);
+  const handlePredict = async () => {
     setError('');
+    setPrediction(null);
+    setProbabilities(null);
+    try {
+      const numericFeatures = Object.fromEntries(
+        Object.entries(features).map(([key, value]) => [key, Number(value) || 0])
+      );
+      const response = await axios.post('http://127.0.0.1:5000/predict', { features: numericFeatures });
+      setPrediction(response.data.prediction);
+      setProbabilities(response.data.probabilities);
+    } catch (err) {
+      setError('An error occurred during prediction.');
+      console.error(err);
+    }
   };
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
     setBatchError('');
+    setBatchResults(null);
   };
 
-  const handleBatchSubmit = async (e) => {
-    e.preventDefault();
+  const handleBatchPredict = async () => {
     if (!file) {
-      setBatchError('Please select a CSV file to upload.');
+      setBatchError('Please select a file first.');
       return;
     }
-
-    setIsBatchLoading(true);
-    setBatchResult(null);
     setBatchError('');
-
-    const uploadFormData = new FormData();
-    uploadFormData.append('file', file);
+    setBatchResults(null);
+    const formData = new FormData();
+    formData.append('file', file);
 
     try {
-      const response = await fetch('http://127.0.0.1:5000/predict_batch', {
-        method: 'POST',
-        body: uploadFormData,
+      const response = await axios.post('http://127.0.0.1:5000/predict_batch', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
-      }
-
-      setBatchResult(data);
+      setBatchResults(response.data);
     } catch (err) {
-      setBatchError(err.message);
-    } finally {
-      setIsBatchLoading(false);
+      setBatchError(err.response?.data?.error || 'An error occurred during batch prediction.');
+      console.error(err);
     }
   };
 
-  const handleBatchReset = () => {
-    setFile(null);
-    setBatchResult(null);
-    setBatchError('');
-    if (document.getElementById('file-input')) {
-      document.getElementById('file-input').value = '';
-    }
-  };
+  // UPDATED: This function now uses the predefined demo data.
+  const handleTestWithBot = () => {
+    // Select a random data set from the demoData array
+    const randomIndex = Math.floor(Math.random() * demoData.length);
+    const botFeatures = demoData[randomIndex];
+    
+    // Ensure all feature values are strings for the input fields
+    const botFeaturesAsString = Object.fromEntries(
+      Object.entries(botFeatures).map(([key, value]) => [key, String(value)])
+    );
 
-  const handleRowClick = async (rowData) => {
-    if (selectedRow && selectedRow.index === rowData.index) {
-      setSelectedRow(null);
-      setExplanation(null);
-      return;
-    }
-
-    setSelectedRow(rowData);
-    setIsExplainLoading(true);
-    setExplanation(null);
-    setExplanationError('');
-
-    const features = feature_names.reduce((obj, key) => {
-      obj[key] = rowData[key];
-      return obj;
-    }, {});
-
-    try {
-      const response = await fetch('http://127.0.0.1:5000/explain', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ features }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get explanation');
-      }
-      setExplanation(data.explanation);
-    } catch (err) {
-      setExplanationError(err.message);
-    } finally {
-      setIsExplainLoading(false);
-    }
+    setFeatures(botFeaturesAsString);
+    // Clear previous results
+    setPrediction(null);
+    setProbabilities(null);
+    setError('');
   };
 
   return (
     <div className="App">
-      <header className="App-header">
+      <header>
         <h1>Cyber Attack Predictor 2.0</h1>
       </header>
       <main>
-        <div className="prediction-section">
+        <div className="card">
           <h2>Single Prediction</h2>
           <p>Enter network traffic features manually to predict activity type.</p>
-          <form onSubmit={handleSubmit}>
-            <div className="form-grid">
-              {feature_names.map(name => (
-                <div className="input-group" key={name}>
-                  <label htmlFor={name}>{name}</label>
-                  <input
-                    type="number"
-                    step="any"
-                    id={name}
-                    name={name}
-                    value={formData[name]}
-                    onChange={handleChange}
-                    required
-                  />
+          <div className="features-grid">
+            {featureNames.map(name => (
+              <div className="input-group" key={name}>
+                <label>{name.replace(/_/g, ' ')}</label>
+                <input
+                  type="number"
+                  name={name}
+                  value={features[name]}
+                  onChange={handleInputChange}
+                  placeholder="0.0"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="button-group">
+            <button onClick={handleTestWithBot} className="btn-secondary">Test with Bot</button>
+            <button onClick={handleReset} className="btn-secondary">Reset</button>
+            <button onClick={handlePredict} className="btn-primary">Predict</button>
+          </div>
+          {error && <p className="error-message">{error}</p>}
+          {prediction && (
+            <div className="results">
+              <h3>Prediction Result: <span className={`prediction-${prediction?.toLowerCase()}`}>{prediction}</span></h3>
+              {probabilities && (
+                <div className="probabilities">
+                  <h4>Probabilities:</h4>
+                  <ul>
+                    {Object.entries(probabilities).sort(([, a], [, b]) => b - a).map(([label, prob]) => (
+                      <li key={label}>
+                        {label}: {(prob * 100).toFixed(2)}%
+                        <div className="prob-bar-container">
+                          <div className="prob-bar" style={{ width: `${prob * 100}%` }}></div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              ))}
-            </div>
-            <div className="form-actions">
-              <button type="button" onClick={handleTestByBot} className="bot-btn">Test with Bot</button>
-              <div className="right-actions">
-                <button type="button" onClick={handleReset} className="reset-btn">Reset</button>
-                <button type="submit" disabled={isLoading}>
-                  {isLoading ? 'Analyzing...' : 'Predict'}
-                </button>
-              </div>
-            </div>
-          </form>
-          {error && <p className="error">Error: {error}</p>}
-          {result && (
-            <div className="result-card">
-              <h2>Analysis Result</h2>
-              <p className="prediction">Prediction: <span>{result.prediction}</span></p>
-              <h3>Confidence Scores</h3>
-              <div className="probabilities">
-                {Object.entries(result.probabilities).sort(([,a],[,b]) => b-a).map(([className, prob]) => (
-                  <div key={className} className="probability-item">
-                    <span className="class-name">{className}</span>
-                    <div className="progress-bar-container">
-                      <div 
-                        className="progress-bar" 
-                        style={{ width: `${prob * 100}%` }}
-                      ></div>
-                    </div>
-                    <span className="percentage">{(prob * 100).toFixed(1)}%</span>
-                  </div>
-                ))}
-              </div>
+              )}
             </div>
           )}
         </div>
 
-        <hr className="section-divider" />
-
-        <div className="prediction-section">
+        <div className="card">
           <h2>Batch Prediction</h2>
           <p>Upload a CSV file with network data to process multiple rows at once.</p>
-          <form onSubmit={handleBatchSubmit}>
-            <div className="file-upload-wrapper">
-              <label htmlFor="file-input" className="file-upload-label">
-                {file ? `Selected: ${file.name}` : 'Click to select a .csv file'}
-              </label>
-              <input 
-                type="file" 
-                id="file-input"
-                accept=".csv" 
-                onChange={handleFileChange}
-                style={{ display: 'none' }}
-              />
-            </div>
-            <div className="form-actions">
-              <button type="button" onClick={handleBatchReset} className="reset-btn">Reset</button>
-              <button type="submit" disabled={isBatchLoading || !file}>
-                {isBatchLoading ? 'Processing...' : 'Process File'}
-              </button>
-            </div>
-          </form>
-          {batchError && <p className="error">Error: {batchError}</p>}
-          {batchResult && (
-            <div className="result-card">
-              <h2>Batch Analysis Summary</h2>
-              <div className="summary-grid">
-                <p><strong>Total Rows:</strong> {batchResult.summary.total_rows}</p>
-                {Object.entries(batchResult.summary)
-                  .filter(([key]) => key !== 'total_rows')
-                  .map(([className, count]) => (
-                    <p key={className}><strong>{className}:</strong> {count}</p>
-                  ))
-                }
+          <div className="input-group">
+            <input type="file" accept=".csv" onChange={handleFileChange} />
+          </div>
+          <div className="button-group">
+            <button onClick={() => { setFile(null); setBatchResults(null); setBatchError(''); document.querySelector('input[type="file"]').value = ''; }} className="btn-secondary">Reset</button>
+            <button onClick={handleBatchPredict} className="btn-primary" disabled={!file}>Process File</button>
+          </div>
+          {file && <p>Selected: {file.name}</p>}
+          {batchError && <p className="error-message">{batchError}</p>}
+          {batchResults && (
+            <div className="results">
+              <h3>Batch Results</h3>
+              <div className="summary">
+                <p>Total Rows: {batchResults.summary.total_rows}</p>
+                <ul>
+                  {Object.entries(batchResults.summary).filter(([key]) => key !== 'total_rows').map(([type, count]) => (
+                    <li key={type}>{type}: {count}</li>
+                  ))}
+                </ul>
               </div>
-              <ResultsTable 
-                data={batchResult.results} 
-                columns={feature_names} 
-                onRowClick={handleRowClick}
-                selectedRowIndex={selectedRow ? selectedRow.index : null}
-              />
-              {selectedRow && (
-                <div className="explanation-card">
-                  <h4>Explanation for Selected Row</h4>
-                  {isExplainLoading && <p>Loading explanation...</p>}
-                  {explanationError && <p className="error">Error: {explanationError}</p>}
-                  {explanation && (
-                    <div>
-                      <p>This row was classified as <strong>{selectedRow.prediction}</strong>. The top contributing factors were:</p>
-                      <ul>
-                        {Object.entries(explanation).map(([feature, level]) => (
-                          <li key={feature}>
-                            A <strong>{level}</strong> value for <strong>'{feature}'</strong>
-                          </li>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      {Object.keys(batchResults.results[0]).map(key => <th key={key}>{key.replace(/_/g, ' ')}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {batchResults.results.map((row, index) => (
+                      <tr key={index}>
+                        {Object.entries(row).map(([key, value]) => (
+                          <td key={key} data-label={key.replace(/_/g, ' ')}>{typeof value === 'number' ? value.toFixed(2) : value}</td>
                         ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
