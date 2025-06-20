@@ -1,103 +1,88 @@
 # -*- coding: utf-8 -*-
+import pandas as pd
 from flask import Flask, request, jsonify
-import pickle
-import numpy as np
-import json
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import LabelEncoder
-import logging
 from flask_cors import CORS
+import joblib
+import os
 
-
-# Initialize Flask app
 app = Flask(__name__)
+CORS(app)
 
-CORS(app, origins=["http://localhost:5173"])
+# --- Loading Models ---
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(backend_dir, 'model.pkl') # Corrected filename
+scaler_path = os.path.join(backend_dir, 'scaler.pkl')
+encoder_path = os.path.join(backend_dir, 'label_encoder.pkl')
 
+try:
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
+    label_encoder = joblib.load(encoder_path)
+except FileNotFoundError as e:
+    print(f"Error loading model files: {e}")
+    print("Please ensure 'model.pkl', 'scaler.pkl', and 'label_encoder.pkl' are in the 'backend' directory.")
+    print("You may need to run 'python backend/notebook.py' first.")
+    exit()
 
-# Configure logging
-logging.basicConfig(
-    filename='predict.log',  # Log file name
-    level=logging.INFO,      # Log level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
-# Load the model and scaler
-with open('model.pkl', 'rb') as model_file:
-    model = pickle.load(model_file)
-
-# Initialize preprocessors
-scaler = StandardScaler()  # This should be fitted with your training data
-label_encoder = LabelEncoder()  # This should also be fitted with your training data
-
-# Example of preprocessing function
-def preprocess_input(data):
-    # Extract the features from the input data
-    packet_length = data.get('packet_length', 0)
-    duration = data.get('duration', 0)
-    source_port = data.get('source_port', 0)
-    destination_port = data.get('destination_port', 0)
-    bytes_sent = data.get('bytes_sent', 0)
-    bytes_received = data.get('bytes_received', 0)
-    flow_packets = data.get('flow_packets', 0)
-    total_fwd_packets = data.get('total_fwd_packets', 0)
-    total_bwd_packets = data.get('total_bwd_packets', 0)
-    sub_flow_fwd_bytes = data.get('sub_flow_fwd_bytes', 0)
-    sub_flow_bwd_bytes = data.get('sub_flow_bwd_bytes', 0)
-    attack_type = data.get('attack_type', 'Normal')  # Default to Normal if not provided
-
-# Preprocess the features (assuming they need scaling or encoding)
-    features = [
-        packet_length,
-        duration,
-        source_port,
-        destination_port,
-        bytes_sent,
-        bytes_received,
-        flow_packets,
-        total_fwd_packets,
-        total_bwd_packets,
-        sub_flow_fwd_bytes,
-        sub_flow_bwd_bytes
-    ]
-
-# Scale the numerical features
-    scaled_features = scaler.fit_transform([features])
-
-    # Encode the categorical 'attack_type'
-    attack_type_encoded = label_encoder.fit_transform([attack_type])
-
-    # Combine features and the encoded attack_type
-    final_input = np.hstack([scaled_features, attack_type_encoded.reshape(1, -1)])
-
-    return final_input
+feature_names = [
+    'Flow Duration', 'Total Fwd Packets', 'Total Backward Packets',
+    'Total Length of Fwd Packets', 'Total Length of Bwd Packets', 'Fwd Packet Length Max',
+    'Fwd Packet Length Min', 'Fwd Packet Length Mean', 'Fwd Packet Length Std',
+    'Bwd Packet Length Max', 'Bwd Packet Length Min', 'Bwd Packet Length Mean',
+    'Bwd Packet Length Std', 'Flow Bytes/s', 'Flow Packets/s', 'Flow IAT Mean',
+    'Flow IAT Std', 'Flow IAT Max', 'Flow IAT Min', 'Fwd IAT Total'
+]
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    logging.info("Received a prediction request:")
-    print(f"Received a prediction request:")
     try:
-        # Parse input JSON
         data = request.get_json()
-        logging.info(f"Request data: {data}")
-        print(f"Request data : {data} ")
-
-        # Preprocess the data
-        processed_data = preprocess_input(data)
-
-        # Make a prediction
-        prediction = model.predict(processed_data)
-        probability = model.predict_proba(processed_data)[0, 1]
-        logging.info(f"Prediction result: {prediction[0]}, Probability : {probability}")
-        print(f"Prediction result: {prediction[0]}, Probability : {probability}")
-
-        # Respond with prediction
-        return jsonify({
-            'prediction': int(prediction[0]),
-            'probability': float(probability)
-        })
+        features_list = data['features']
+        df = pd.DataFrame([features_list], columns=feature_names)
+        scaled_features = scaler.transform(df)
+        prediction_encoded = model.predict(scaled_features)
+        prediction_proba = model.predict_proba(scaled_features)
+        prediction_label = label_encoder.inverse_transform(prediction_encoded)[0]
+        probabilities = dict(zip(label_encoder.classes_, prediction_proba[0]))
+        return jsonify({'prediction': prediction_label, 'probabilities': probabilities})
     except Exception as e:
-        return jsonify({'error': str(e)})
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+
+@app.route('/predict_batch', methods=['POST'])
+def predict_batch():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    if file and file.filename.endswith('.csv'):
+        try:
+            df = pd.read_csv(file)
+            if not all(col in df.columns for col in feature_names):
+                return jsonify({'error': 'CSV is missing required columns'}), 400
+            X_batch = df[feature_names]
+            scaled_features = scaler.transform(X_batch)
+            predictions_encoded = model.predict(scaled_features)
+            df['prediction'] = label_encoder.inverse_transform(predictions_encoded)
+            df.reset_index(inplace=True)
+            results = df.to_dict(orient='records')
+            summary = df['prediction'].value_counts().to_dict()
+            summary['total_rows'] = len(df)
+            return jsonify({'results': results, 'summary': summary})
+        except Exception as e:
+            return jsonify({'error': f'Batch processing error: {str(e)}'}), 500
+    return jsonify({'error': 'Invalid file type'}), 400
+
+@app.route('/explain', methods=['POST'])
+def explain():
+    try:
+        data = request.get_json()
+        features_dict = data['features']
+        sorted_features = sorted(features_dict.items(), key=lambda item: abs(float(item[1])), reverse=True)
+        explanation = {feature: "high" for feature, value in sorted_features[:3]}
+        return jsonify({'explanation': explanation})
+    except Exception as e:
+        return jsonify({'error': f'Explanation error: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    app.run(debug=True, port=5000)

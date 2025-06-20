@@ -1,7 +1,6 @@
-Flask>=2.2
-flask-cors
-scikit-learn
 pandas
 numpy
-matplotlib
-pickle-mixin
+scikit-learn
+Flask
+Flask-Cors
+joblib
