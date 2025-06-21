@@ -1,243 +1,133 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import axios from "axios";
 
-const InputForm = () => {
-  const [formData, setFormData] = useState({
-    packet_length: "",
-    duration: "",
-    source_port: "",
-    destination_port: "",
-    bytes_sent: "",
-    bytes_received: "",
-    flow_packets: "",
-    total_fwd_packets: "",
-    total_bwd_packets: "",
-    sub_flow_fwd_bytes: "",
-    sub_flow_bwd_bytes: "",
-    attack_type: "Normal", // Default value
-    label: "",
-  });
+// This config should align with featureNames in App.jsx and backend model
+const formFieldsConfig = [
+  { name: 'Packet_Length', label: 'Packet Length', type: 'number', required: true, defaultValue: "" },
+  { name: 'Duration', label: 'Duration', type: 'number', required: true, defaultValue: "" },
+  { name: 'Bytes_Sent', label: 'Bytes Sent', type: 'number', required: true, defaultValue: "" },
+  { name: 'Bytes_Received', label: 'Bytes Received', type: 'number', required: true, defaultValue: "" },
+  { name: 'Flow_Packets/s', label: 'Flow Packets/s', type: 'number', required: true, defaultValue: "" },
+  { name: 'Flow_Bytes/s', label: 'Flow Bytes/s', type: 'number', required: true, defaultValue: "" },
+  { name: 'Avg_Packet_Size', label: 'Avg Packet Size', type: 'number', required: true, defaultValue: "" },
+  { name: 'Total_Fwd_Packets', label: 'Total Fwd Packets', type: 'number', required: true, defaultValue: "" },
+  { name: 'Total_Bwd_Packets', label: 'Total Bwd Packets', type: 'number', required: true, defaultValue: "" },
+  { name: 'Fwd_Header_Length', label: 'Fwd Header Length', type: 'number', required: true, defaultValue: "" },
+  { name: 'Bwd_Header_Length', label: 'Bwd Header Length', type: 'number', required: true, defaultValue: "" },
+  { name: 'Sub_Flow_Fwd_Bytes', label: 'Sub Flow Fwd Bytes', type: 'number', required: true, defaultValue: "" },
+  { name: 'Sub_Flow_Bwd_Bytes', label: 'Sub Flow Bwd Bytes', type: 'number', required: true, defaultValue: "" },
+];
 
-  const [response, setResponse] = useState(null); // State to store API response
-  const [isLoading, setIsLoading] = useState(false); // State to show loading indicator
-
-  // Handle form field changes
-
-  // Handle form field changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
+const InputForm = forwardRef(({ onPrediction, onReset, initialFeatures }, ref) => {
+  const generateInitialFormData = (features) => {
+    return formFieldsConfig.reduce((acc, field) => {
+      acc[field.name] = features && features[field.name] !== undefined ? String(features[field.name]) : field.defaultValue;
+      return acc;
+    }, {});
   };
 
-  // Handle form submission
-  const handleSubmit = async(e) => {
+  const [formData, setFormData] = useState(generateInitialFormData(initialFeatures));
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  // Removed local response state, parent (App.jsx) will handle displaying predictions
+
+  useEffect(() => {
+    setFormData(generateInitialFormData(initialFeatures));
+  }, [initialFeatures]);
+
+  useImperativeHandle(ref, () => ({
+    resetFormFields() {
+      setFormData(generateInitialFormData(null)); // Reset with default values
+      setError('');
+    },
+    setFormFields(featuresToSet) {
+      setFormData(generateInitialFormData(featuresToSet));
+    }
+  }));
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFormResetInternal = () => {
+    setFormData(generateInitialFormData(null)); // Reset with default values
+    setError('');
+    if (onReset) onReset();
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true); // Show loading state
-    // Call an API or function to process the data (e.g., submit the data to the backend)
-    console.log(formData);
-    // Example: You can use fetch or axios to send data to the backend
+    setIsLoading(true);
+    setError('');
+
+    const numericFeatures = Object.fromEntries(
+      Object.entries(formData).map(([key, value]) => {
+        const fieldConfig = formFieldsConfig.find(f => f.name === key);
+        if (fieldConfig && fieldConfig.type === 'number') {
+          return [key, Number(value) || 0];
+        }
+        return [key, value]; // Should not happen if config is all numbers
+      })
+    );
+
     try {
-      const res = await axios.post("http://localhost:5002/predict", formData, {
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-      setResponse(res.data); // Save the response to state
-      console.log("Server response:", res.data);
-    } catch (error) {
-      console.error("Error submitting data:", error);
-      setResponse("Error occurred while processing the request.");
+      // API URL will be passed via prop or context in later steps
+      const apiUrl = `${import.meta.env.VITE_API_BASE_URL}/predict`;
+      const response = await axios.post(apiUrl, { features: numericFeatures });
+      if (onPrediction) onPrediction(response.data);
+    } catch (err) {
+      const errorMessage = err.response?.data?.error || "Error submitting data.";
+      setError(errorMessage);
+      if (onPrediction) onPrediction({ error: errorMessage, prediction: null, probabilities: null });
     } finally {
-      setIsLoading(false); // Hide loading state
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="bg-white text-gray-800 p-6 rounded-lg shadow-lg max-w-3xl w-full">
-    <form onSubmit={handleSubmit} id="model-input-form" className="space-y-4 font-sans">
-      <br></br>
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <label htmlFor="packet_length">Packet Length:</label>
-          <input
-            type="number"
-            id="packet_length"
-            name="packet_length"
-            value={formData.packet_length}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-        <div>
-          <label htmlFor="duration">Duration:</label>
-          <input
-            type="number"
-            id="duration"
-            name="duration"
-            value={formData.duration}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-        <div>
-          <label htmlFor="source_port">Source Port:</label>
-          <input
-            type="number"
-            id="source_port"
-            name="source_port"
-            value={formData.source_port}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="destination_port">Destination Port:</label>
-          <input
-            type="number"
-            id="destination_port"
-            name="destination_port"
-            value={formData.destination_port}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-        <div>
-          <label htmlFor="bytes_sent">Bytes Sent:</label>
-          <input
-            type="number"
-            id="bytes_sent"
-            name="bytes_sent"
-            value={formData.bytes_sent}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-        <div>
-          <label htmlFor="bytes_received">Bytes Received:</label>
-          <input
-            type="number"
-            id="bytes_received"
-            name="bytes_received"
-            value={formData.bytes_received}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="flow_packets">Flow Packets/s:</label>
-          <input
-            type="number"
-            id="flow_packets"
-            name="flow_packets"
-            value={formData.flow_packets}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-        <div>
-          <label htmlFor="total_fwd_packets">Total Forward Packets:</label>
-          <input
-            type="number"
-            id="total_fwd_packets"
-            name="total_fwd_packets"
-            value={formData.total_fwd_packets}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-        <div>
-          <label htmlFor="total_bwd_packets">Total Backward Packets:</label>
-          <input
-            type="number"
-            id="total_bwd_packets"
-            name="total_bwd_packets"
-            value={formData.total_bwd_packets}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="sub_flow_fwd_bytes">Sub Flow Forward Bytes:</label>
-          <input
-            type="number"
-            id="sub_flow_fwd_bytes"
-            name="sub_flow_fwd_bytes"
-            value={formData.sub_flow_fwd_bytes}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-        <div>
-          <label htmlFor="sub_flow_bwd_bytes">Sub Flow Backward Bytes:</label>
-          <input
-            type="number"
-            id="sub_flow_bwd_bytes"
-            name="sub_flow_bwd_bytes"
-            value={formData.sub_flow_bwd_bytes}
-            onChange={handleChange}
-            required
-            className="border p-2 w-full"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="attack_type">Attack Type:</label>
-          <select
-            id="attack_type"
-            name="attack_type"
-            value={formData.attack_type}
-            onChange={handleChange}
-            className="border p-2 w-full"
-          >
-            <option value="DDoS">DDoS</option>
-            <option value="Brute Force">Brute Force</option>
-            <option value="Normal">Normal</option>
-            <option value="Ransomware">Ransomware</option>
-          </select>
-        </div>
+    // Removed outer div to allow App.jsx to control card styling if needed
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="features-grid"> {/* Using class from App.jsx for consistency */}
+        {formFieldsConfig.map((field) => (
+          <div className="input-group" key={field.name}> {/* Using class from App.jsx */}
+            <label htmlFor={field.name} className="block text-sm font-medium text-gray-700">
+              {field.label}
+            </label>
+            <input
+              type={field.type}
+              id={field.name}
+              name={field.name}
+              value={formData[field.name]}
+              onChange={handleChange}
+              required={field.required}
+              placeholder="0.0" // Consistent placeholder
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+            />
+          </div>
+        ))}
       </div>
 
-      <div className="text-center mt-4">
-          <button
-            type="submit"
-            className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition duration-200"
-          >
-            {isLoading ? "Loading..." : "Submit"}
-          </button>
-        </div>
-    </form>
+      {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
 
-    {/* Display the response */}
-    {response && (
-        <div className="mt-6 p-4 border rounded-lg bg-gray-100">
-          <h2 className="text-lg font-semibold mb-2">Result:</h2>
-          {response.error ? (
-            <p className="text-red-500">{response.error}</p>
-          ) : (
-            <>
-              <p><strong>Prediction:</strong> {response.prediction}</p>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+      <div className="flex items-center justify-end space-x-3 pt-4">
+        <button
+          type="button"
+          onClick={handleFormResetInternal}
+          className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition duration-200 text-sm"
+        >
+          Clear Fields
+        </button>
+        <button
+          type="submit"
+          className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition duration-200 text-sm"
+          disabled={isLoading}
+        >
+          {isLoading ? "Loading..." : "Predict"}
+        </button>
+      </div>
+    </form>
   );
-};
+});
 
 export default InputForm;

@@ -1,0 +1,114 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, master ] # Adjust if your main branch has a different name
+  pull_request:
+    branches: [ main, master ] # Adjust if your main branch has a different name
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"] # Specify Python versions to test with
+        node-version: ["18.x"] # Specify Node.js versions for frontend
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    # Frontend Steps
+    - name: Set up Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install Frontend Dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Lint Frontend
+      working-directory: ./frontend
+      run: npm run lint # Assumes 'eslint .' or similar is configured
+
+    - name: Test Frontend
+      working-directory: ./frontend
+      run: npm test
+
+    # Backend Steps
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Pipenv
+      run: pip install pipenv
+
+    - name: Install Backend Dependencies (Pipenv)
+      working-directory: ./backend
+      # Using pipenv sync --dev ensures that the Pipfile.lock is strictly followed
+      # and dev dependencies are installed.
+      run: pipenv sync --dev
+      # Caching pipenv virtualenv could be an optimization for larger projects:
+      # uses: actions/cache@v3
+      # with:
+      #   path: ~/.local/share/virtualenvs
+      #   key: ${{ runner.os }}-pipenv-${{ hashFiles('**/Pipfile.lock') }}
+      #   restore-keys: |
+      #     ${{ runner.os }}-pipenv-
+
+    - name: Lint Backend (Flake8)
+      working-directory: ./backend
+      # Run flake8; default paths are usually fine. Add specific paths if needed.
+      run: pipenv run flake8 .
+      # To make it non-blocking initially if there are many errors:
+      # run: pipenv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    # Placeholder for backend tests if they are added later
+    # - name: Test Backend
+    #   working-directory: ./backend
+    #   run: pipenv run python -m unittest discover -s tests -p "test_*.py"
+    #   # or pipenv run pytest
+
+  build-backend-docker:
+    name: Build Backend Docker Image
+    runs-on: ubuntu-latest
+    needs: lint-and-test # Run this job only if lint-and-test passes
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') # Only build on push to main/master
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+
+    # Potentially set up Docker Buildx for multi-platform builds or advanced features
+    # - name: Set up Docker Buildx
+    #   uses: docker/setup-buildx-action@v3
+
+    # Login to a Docker registry would go here if pushing images
+    # - name: Log in to Docker Hub
+    #   uses: docker/login-action@v3
+    #   with:
+    #     username: ${{ secrets.DOCKER_USERNAME }}
+    #     password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Build Backend Docker image
+      # docker build -t yourusername/cyber-threat-backend:latest ./backend
+      # If not pushing, just a build command is fine:
+      run: docker build -t cyber-threat-backend-ci-build ./backend
+      # To load into local Docker daemon for other steps (if any):
+      # uses: docker/build-push-action@v5
+      # with:
+      #   context: ./backend
+      #   push: false # Set to true to push to registry
+      #   tags: yourusername/cyber-threat-backend:latest # Example tag
+      #   load: true # Load image to local Docker daemon
+
+    # Add further steps like pushing the image to a registry if needed.
+    # Example:
+    # - name: Push Backend Docker image to Docker Hub
+    #   run: docker push yourusername/cyber-threat-backend:latest
+    #   if: success() && github.event_name == 'push' # Only push if build succeeded and it's a push event

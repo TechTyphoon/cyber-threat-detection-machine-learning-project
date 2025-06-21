@@ -1,0 +1,153 @@
+openapi: 3.0.0
+info:
+  title: Cyber Threat Detection API
+  version: "1.0.0"
+  description: API for predicting cyber threats based on network traffic features.
+
+servers:
+  - url: http://127.0.0.1:5000 # Base URL for local development (Flask dev server)
+    description: Local development server
+  - url: http://localhost:5002 # Base URL for Dockerized app
+    description: Dockerized application server
+
+components:
+  schemas:
+    FeatureSet:
+      type: object
+      properties:
+        Packet_Length: { type: number, example: 50 }
+        Duration: { type: number, example: 1500 }
+        Bytes_Sent: { type: number, example: 3000 }
+        Bytes_Received: { type: number, example: 0 }
+        'Flow_Packets/s': { type: number, example: 20000 }
+        'Flow_Bytes/s': { type: number, example: 1000000 }
+        Avg_Packet_Size: { type: number, example: 50 }
+        Total_Fwd_Packets: { type: number, example: 30 }
+        Total_Bwd_Packets: { type: number, example: 0 }
+        Fwd_Header_Length: { type: number, example: 600 }
+        Bwd_Header_Length: { type: number, example: 0 }
+        Sub_Flow_Fwd_Bytes: { type: number, example: 3000 }
+        Sub_Flow_Bwd_Bytes: { type: number, example: 0 }
+      required:
+        - Packet_Length
+        - Duration
+        # Add all other required feature names here for completeness if desired
+
+    PredictionRequest:
+      type: object
+      properties:
+        features:
+          $ref: '#/components/schemas/FeatureSet'
+
+    PredictionResponse:
+      type: object
+      properties:
+        prediction:
+          type: string
+          example: "DDoS"
+        probabilities:
+          type: object
+          additionalProperties:
+            type: number
+            format: float
+          example: {"DDoS": 0.85, "Normal": 0.10, "PortScan": 0.05}
+        error:
+          type: string
+          example: "An error occurred."
+
+    BatchPredictionSummary:
+      type: object
+      properties:
+        total_rows: { type: integer, example: 100 }
+        DDoS: { type: integer, example: 20 }
+        Normal: { type: integer, example: 75 }
+        PortScan: { type: integer, example: 5 }
+      # Other properties dynamically based on prediction labels
+
+    BatchPredictionResultRow: # Define what a single row in batch results looks like
+      type: object
+      properties:
+        # Include all original CSV columns plus the prediction
+        # Example - assuming original CSV had these features:
+        Packet_Length: { type: number, example: 50 }
+        Duration: { type: number, example: 1500 }
+        # ... other feature columns ...
+        prediction: { type: string, example: "DDoS" }
+      # Add required fields if necessary
+
+    BatchPredictionResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchPredictionResultRow' # This needs to be more dynamic or list all possible input features
+        summary:
+          $ref: '#/components/schemas/BatchPredictionSummary'
+        error:
+          type: string
+          example: "Batch processing error."
+
+paths:
+  /predict:
+    post:
+      summary: Predict cyber threat for a single instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PredictionRequest'
+      responses:
+        '200':
+          description: Successful prediction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionResponse' # Reusing for error structure
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionResponse' # Reusing for error structure
+
+  /predict_batch:
+    post:
+      summary: Predict cyber threats for a batch of instances from a CSV file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV file containing network traffic features.
+      responses:
+        '200':
+          description: Successful batch prediction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchPredictionResponse'
+        '400':
+          description: Invalid input (e.g., no file, wrong file type, missing columns)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchPredictionResponse' # Reusing for error structure
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchPredictionResponse' # Reusing for error structure

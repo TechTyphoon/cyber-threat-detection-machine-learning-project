@@ -11,8 +11,13 @@ pandas = "*"
 numpy = "*"
 matplotlib = "*"
 pickle-mixin = "*"
+joblib = "*"
+gunicorn = "*"
+flask-swagger-ui = "*"
+PyYAML = "*"
 
 [dev-packages]
+flake8 = "*"
 
 [requires]
 python_version = "3.11"

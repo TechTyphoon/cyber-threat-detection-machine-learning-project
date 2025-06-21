@@ -17,13 +17,9 @@ RUN pipenv install --deploy --ignore-pipfile
 # Copy the application code into the container
 COPY . /app/
 
-# Set environment variables for Flask
-ENV FLASK_APP=predict.py
-ENV FLASK_RUN_HOST=0.0.0.0
-ENV FLASK_RUN_PORT=5002
-
-# Expose the port Flask will run on
+# Expose the port Gunicorn will run on
 EXPOSE 5002
 
-# Command to run the Flask app
-CMD ["pipenv", "run", "flask", "run"]
+# Command to run the application using Gunicorn
+# predict:app assumes your Flask application instance is named 'app' in 'predict.py'
+CMD ["pipenv", "run", "gunicorn", "--bind", "0.0.0.0:5002", "predict:app"]

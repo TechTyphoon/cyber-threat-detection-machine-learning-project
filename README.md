@@ -130,9 +130,11 @@ Prerequesite : Install Required Software:
 
   cd backend
 
-2. Steps to Create Pipfile and Pipfile.lock
+2. Install dependencies using Pipenv:
 
-  pip install -r requirements.txt
+  pipenv install --dev
+
+  (This will install all dependencies from Pipfile, including development dependencies, and create/update Pipfile.lock)
 
 3. Verify the Pipenv Environment:
 
@@ -148,12 +150,7 @@ Prerequesite : Install Required Software:
 
   exit
 
-6. Export Dependencies to Pipfile.lock:
-
-The Pipfile.lock will be automatically generated when you run pipenv install.
-Verify that it exists in the backend directory.
-
-7. Steps to Dockerize the Backend
+6. Steps to Dockerize the Backend
 
    Run the following command to build the Docker image: (from Dockerfile)
 
@@ -172,6 +169,10 @@ Verify that it exists in the backend directory.
 
   ![image](https://github.com/user-attachments/assets/68088c08-fe2f-462f-8667-7a2888e93ad8)
 
+API Documentation:
+  Once the backend is running (either locally or via Docker), API documentation is available at:
+  - Local (Flask dev server): http://127.0.0.1:5000/api/docs
+  - Docker: http://localhost:5002/api/docs
 
 9. Test the backend API : Ensure the backend is running at
 
@@ -223,7 +224,8 @@ This project is a full-stack web application that uses a machine learning model 
 │   │   └── cyberfeddefender_dataset.csv  # The training dataset
 │   ├── notebook.py                       # Script to train the model and generate .pkl files
 │   ├── predict.py                        # The Flask backend server
-│   ├── requirements.txt                  # Python dependencies
+│   ├── Pipfile                           # Python dependencies managed by Pipenv
+│   ├── Pipfile.lock                      # Pipenv lock file
 │   └── *.pkl                             # Generated model files (after training)
 │
 └── frontend/
@@ -254,7 +256,16 @@ python -m venv venv
 source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
 
 # 3. Install the required Python libraries
+#    First, ensure pipenv is installed: pip install pipenv
+#    Navigate to the backend directory to generate a requirements.txt from Pipfile.lock:
+cd backend
+pipenv requirements > requirements.txt
+#    Navigate back to the project root (or wherever your venv was activated)
+cd ..
+#    Install dependencies into your active venv:
 pip install -r backend/requirements.txt
+#    Optionally, remove the temporary requirements.txt from the backend folder after installation
+#    rm backend/requirements.txt
 
 # 4. Run the training script to generate the model files
 # This reads the dataset and creates model.pkl, scaler.pkl, and label_encoder.pkl
